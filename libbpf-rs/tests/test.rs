@@ -298,6 +298,70 @@ fn test_object_map_update_batch() {
         .is_err());
 }
 
+#[test]
+fn test_sudo_object_map_lookup_batch() {
+    bump_rlimit_mlock();
+
+    let mut obj = get_test_object("runqslower.bpf.o");
+    let start = obj.map_mut("start").expect("failed to find map");
+
+    let key1 = 1u32.to_ne_bytes();
+    let key2 = 2u32.to_ne_bytes();
+    let key3 = 3u32.to_ne_bytes();
+    let key4 = 4u32.to_ne_bytes();
+
+    let value1 = 369u64.to_ne_bytes();
+    let value2 = 258u64.to_ne_bytes();
+    let value3 = 147u64.to_ne_bytes();
+    let value4 = 159u64.to_ne_bytes();
+
+    let batch_key1 = key1.into_iter().chain(key2).collect::<Vec<_>>();
+    let batch_value1 = value1.into_iter().chain(value2).collect::<Vec<_>>();
+
+    let batch_key2 = key2.into_iter().chain(key3).chain(key4).collect::<Vec<_>>();
+    let batch_value2 = value2
+        .into_iter()
+        .chain(value3)
+        .chain(value4)
+        .collect::<Vec<_>>();
+
+    // pre-populate the lookup map
+    start
+        .update_batch(
+            &batch_key1,
+            &batch_value1,
+            2,
+            MapFlags::ANY,
+            MapFlags::NO_EXIST,
+        )
+        .expect("Failed to update map");
+    start
+        .update_batch(
+            &batch_key2,
+            &batch_value2,
+            3,
+            MapFlags::ANY,
+            MapFlags::NO_EXIST,
+        )
+        .expect("Failed to update map");
+
+    let key_holder: [u8; 4] = [0, 0, 0, 0];
+    let value_holder: [u8; 4] = [0, 0, 0, 0];
+    let in_batch: [u8; 4] = [0, 0, 0, 0];
+    let out_batch: [u8; 4] = [0, 0, 0, 0];
+    assert!(start
+        .lookup_batch(
+            &std::ptr::null(),
+            &out_batch,
+            &key_holder,
+            &value_holder,
+            1,
+            MapFlags::ANY,
+            MapFlags::EXIST,
+        )
+        .is_ok());
+}
+
 #[tag(root)]
 #[test]
 fn test_object_map_delete_batch() {

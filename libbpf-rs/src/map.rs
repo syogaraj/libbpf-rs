@@ -792,6 +792,110 @@ impl MapHandle {
         }
     }
 
+    /// Lookup and delete batch
+    pub fn lookup_and_delete_batch(
+        &self,
+        in_batch: &[u8],
+        out_batch: &[u8],
+        keys: &[u8],
+        values: &[u8],
+        count: u32,
+        elem_flags: MapFlags,
+        flags: MapFlags,
+    ) -> Result<()> {
+        if keys.len() as u32 / count != self.key_size() || (keys.len() as u32) % count != 0 {
+            return Err(Error::with_invalid_data(format!(
+                "batch key_size {} != {} * {}",
+                keys.len(),
+                self.key_size(),
+                count
+            )));
+        };
+
+        if values.len() as u32 / count != self.value_size() || (values.len() as u32) % count != 0 {
+            return Err(Error::with_invalid_data(format!(
+                "batch value_size {} != {} * {}",
+                values.len(),
+                self.value_size(),
+                count
+            )));
+        }
+
+        let opts = libbpf_sys::bpf_map_batch_opts {
+            sz: mem::size_of::<libbpf_sys::bpf_map_batch_opts>() as _,
+            elem_flags: elem_flags.bits(),
+            flags: flags.bits(),
+        };
+
+        let mut count = count;
+
+        let ret = unsafe {
+            libbpf_sys::bpf_map_lookup_and_delete_batch(
+                self.fd.as_raw_fd(),
+                in_batch.as_ptr() as *mut c_void,
+                out_batch.as_ptr() as *mut c_void,
+                keys.as_ptr() as *mut c_void,
+                values.as_ptr() as *mut c_void,
+                (&mut count) as *mut u32,
+                &opts as *const _,
+            )
+        };
+
+        util::parse_ret(ret)
+    }
+
+    /// Lookup batch
+    pub fn lookup_batch(
+        &self,
+        in_batch: &[u8],
+        out_batch: &[u8],
+        keys: &[u8],
+        values: &[u8],
+        count: u32,
+        elem_flags: MapFlags,
+        flags: MapFlags,
+    ) -> Result<()> {
+        if keys.len() as u32 / count != self.key_size() || (keys.len() as u32) % count != 0 {
+            return Err(Error::with_invalid_data(format!(
+                "batch key_size {} != {} * {}",
+                keys.len(),
+                self.key_size(),
+                count
+            )));
+        };
+
+        if values.len() as u32 / count != self.value_size() || (values.len() as u32) % count != 0 {
+            return Err(Error::with_invalid_data(format!(
+                "batch value_size {} != {} * {}",
+                values.len(),
+                self.value_size(),
+                count
+            )));
+        }
+
+        let opts = libbpf_sys::bpf_map_batch_opts {
+            sz: mem::size_of::<libbpf_sys::bpf_map_batch_opts>() as _,
+            elem_flags: elem_flags.bits(),
+            flags: flags.bits(),
+        };
+
+        let mut count = count;
+
+        let ret = unsafe {
+            libbpf_sys::bpf_map_lookup_batch(
+                self.fd.as_raw_fd(),
+                in_batch.as_ptr() as *mut c_void,
+                out_batch.as_ptr() as *mut c_void,
+                keys.as_ptr() as *mut c_void,
+                values.as_ptr() as *mut c_void,
+                (&mut count) as *mut u32,
+                &opts as *const _,
+            )
+        };
+
+        util::parse_ret(ret)
+    }
+
     /// Update an element.
     ///
     /// `key` must have exactly [`MapHandle::key_size()`] elements. `value` must have exactly
