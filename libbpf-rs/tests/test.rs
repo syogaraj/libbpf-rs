@@ -37,6 +37,7 @@ use libbpf_rs::OpenObject;
 use libbpf_rs::Program;
 use libbpf_rs::ProgramType;
 use libbpf_rs::TracepointOpts;
+use libbpf_rs::UprobeMultiOpts;
 use libbpf_rs::UprobeOpts;
 use libbpf_rs::UsdtOpts;
 
@@ -1583,6 +1584,36 @@ fn test_sudo_object_uprobe_with_opts() {
     };
     let _link = prog
         .attach_uprobe_with_opts(pid, path, func_offset, opts)
+        .expect("Failed to attach prog");
+
+    let map = obj.map("ringbuf").expect("Failed to get ringbuf map");
+    let action = || {
+        let _ = uprobe_target();
+    };
+    let result = with_ringbuffer(map, action);
+
+    assert_eq!(result, 1);
+}
+
+/// Check that we can attach a BPF program to multiple uprobe
+#[test]
+fn test_sudo_object_uprobe_with_multi_opts() {
+    bump_rlimit_mlock();
+    let mut obj = get_test_object("uprobe.bpf.o");
+    let prog = obj
+        .prog_mut("handle__uprobe")
+        .expect("Failed to find program");
+    let pid = unsafe { libc::getpid() };
+    let path = std::env::current_exe().expect("Failed to find executable name");
+    let opts = UprobeMultiOpts {
+        offsets: 0,
+        syms: "uprobe_target".to_owned(),
+        cnt: 1,
+        ..Default::default()
+    };
+
+    let _link = prog
+        .attach_uprobe_multi(pid, path, "uprobe_target".to_string().into(), opts)
         .expect("Failed to attach prog");
 
     let map = obj.map("ringbuf").expect("Failed to get ringbuf map");

@@ -43,6 +43,23 @@ pub struct UprobeOpts {
     pub _non_exhaustive: (),
 }
 
+/// Options to optionally be provided when attaching to a multi uprobe.
+#[derive(Clone, Debug, Default)]
+pub struct UprobeMultiOpts {
+    /// symbols  TODO: rewrite the comment
+    pub syms: String,
+    /// Offsets of the attach point
+    pub offsets: usize,
+    /// Offset of kernel reference counted USDT semaphore.
+    pub ref_ctr_offsets: usize,
+    /// Custom user-provided value accessible through `bpf_get_attach_cookie`.
+    pub cookies: u64,
+    /// Count TODO: rewrite the comment
+    pub cnt: usize,
+    /// uprobe is return probe, invoked at function return time.
+    pub retprobe: bool,
+}
+
 /// Options to optionally be provided when attaching to a USDT.
 #[derive(Clone, Debug, Default)]
 pub struct UsdtOpts {
@@ -589,6 +606,56 @@ impl Program {
                 pid,
                 path_ptr,
                 func_offset as libbpf_sys::size_t,
+                &opts as *const _,
+            )
+        })
+        .map(|ptr| unsafe {
+            // SAFETY: the pointer came from libbpf and has been checked for errors
+            Link::new(ptr)
+        })
+    }
+
+    /// Attach this program to a [userspace
+    /// probe](https://www.kernel.org/doc/html/latest/trace/uprobetracer.html),
+    /// providing multiple options.
+    pub fn attach_uprobe_multi<T: AsRef<Path>>(
+        &mut self,
+        pid: i32,
+        binary_path: T,
+        func_pattern: T,
+        opts: UprobeMultiOpts,
+    ) -> Result<Link> {
+        let binary_path_cstring = util::path_to_cstring(binary_path)?;
+        let func_pattern_cstring = util::path_to_cstring(func_pattern)?;
+
+        let binary_path_ptr = binary_path_cstring.as_ptr();
+        let func_pattern_ptr = func_pattern_cstring.as_ptr();
+
+        let UprobeMultiOpts {
+            syms,
+            offsets,
+            ref_ctr_offsets,
+            cookies,
+            cnt,
+            retprobe,
+        } = opts;
+
+        let opts = libbpf_sys::bpf_uprobe_multi_opts {
+            sz: size_of::<libbpf_sys::bpf_uprobe_multi_opts>() as _,
+            ref_ctr_offsets: ref_ctr_offsets as *const u64,
+            cookies: cookies as *const u64,
+            syms: syms.as_ptr() as *mut *const std::os::raw::c_char,
+            offsets: offsets as *const u64, 
+            cnt: cnt as libbpf_sys::size_t,
+            retprobe,
+            ..Default::default()
+        };
+        util::create_bpf_entity_checked(|| unsafe {
+            libbpf_sys::bpf_program__attach_uprobe_multi(
+                self.ptr.as_ptr(),
+                pid,
+                binary_path_ptr,
+                func_pattern_ptr,
                 &opts as *const _,
             )
         })
